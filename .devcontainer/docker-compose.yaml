@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker-host.sock
+    command: sleep infinity
+    network_mode: "host"
+    environment:
+      - DOCKER_HOST=unix://var/run/docker-host.sock
+      - ENVIRONMENT=development
+      - RUST_LOG=debug
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

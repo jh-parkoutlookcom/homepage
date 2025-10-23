@@ -1,0 +1,42 @@
+{ 
+    "name": "homepage", 
+    "dockerComposeFile": ["./docker-compose.yaml"],
+    "service": "devcontainer",
+    "workspaceFolder": "/workspace",
+    "shutdownAction": "stopCompose",
+    "containerEnv": { "ENVIRONMENT": "development"},
+    "customizations": {
+        "vscode" : {
+            "extensions": [
+                "ms-vscode.vscode-typescript-next",
+                "bradlc.vscode-tailwindcss",
+                "esbenp.prettier-vscode",
+                "ms-vscode.vscode-json",
+                "ms-azuretools.vscode-docker",
+                "dbaeumer.vscode-eslint",
+                "ms-vscode-remote.remote-containers"
+            ],
+            "settings": {
+                "terminal.integrated.shell.linux": "/bin/zsh",
+                "editor.formatOnSave": true,
+                "rust-analyzer.check.command": "check",
+                "rust-analyzer.cargo.buildScripts.enable": true,
+
+                "[rust]": {
+                    "editor.defaultFormatter": "rust-lang.rust-analyzer"    
+                },
+                "[javascript]": {
+                    "editor.defaultFormatter": "vscode.typescript-language-features"
+                },
+                "[typescript]": {
+                    "editor.defaultFormatter": "vscode.typescript-language-features"
+                },
+                "[typescriptreact]": {
+                    "editor.defaultFormatter": "vscode.typescript-language-features" 
+                }
+            }
+        }
+    },
+    "remoteUser": "vscode",
+    "postCreateCommand": "chmod +x /workspace/.devcontainer/start-dev.sh && /workspace/.devcontainer/start-dev.sh"
+}
