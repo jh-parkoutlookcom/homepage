@@ -9,7 +9,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'dockerbuild/**'
-      - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/env-docker-publish.yml'
     tags: [ 'v*.*.*' ]
  
 env:
@@ -77,9 +77,6 @@ jobs:
           echo "version_build=$NEW_VERSION-build.$BUILD_NUMBER" >> $GITHUB_OUTPUT
           echo "version_date=$NEW_VERSION-$DATE" >> $GITHUB_OUTPUT
           echo "version_sha=$NEW_VERSION-$SHORT_SHA" >> $GITHUB_OUTPUT
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "minor=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
-          echo "patch=$MAJOR.$MINOR.$PATCH" >> $GITHUB_OUTPUT
 
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
@@ -100,6 +97,7 @@ jobs:
           file: ./dockerbuild/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
+            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_build }}
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_date }}
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_sha }}
@@ -122,7 +120,7 @@ jobs:
           IMAGE_DIGEST: ${{ steps.build-and-push.outputs.digest }}
         run: |
           cosign sign --yes \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}
+            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}
 
       - name: 8/8. Output version information
         run: |
