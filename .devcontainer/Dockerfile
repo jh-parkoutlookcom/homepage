@@ -1,5 +1,5 @@
 #  deployment stage
-FROM harbor.yuiop.org/homepage/homepage-dev:v0.1 AS devcontainer 
+FROM harbor.yuiop.org/homepage/homepage-dev:latest AS devcontainer 
 
 USER vscode
 WORKDIR /workspace

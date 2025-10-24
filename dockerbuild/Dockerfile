@@ -1,5 +1,5 @@
 # development stage
-FROM debian:stable-slim AS development 
+FROM rust:slim AS development 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     git \
@@ -16,6 +16,21 @@ RUN apt-get update && apt-get install -y \
     redis-tools \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Rust 환경 설정
+RUN rustup default stable \
+    && rustup update stable \
+    && rustup component add rust-src \
+    && rustup component add clippy \
+    && rustup component add rustfmt
+# Install common Rust development tools
+# RUN cargo install \
+#     cargo-watch \
+#     cargo-edit \
+#     cargo-audit \
+#     cargo-outdated
+
+
 
 # oracle client installation
 RUN mkdir -p /opt/oracle \
