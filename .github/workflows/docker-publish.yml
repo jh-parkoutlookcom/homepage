@@ -1,0 +1,142 @@
+name: Docker Build and Push 
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'dockerbuild/**'
+    # tags: [ 'v*.*.*' ]
+ 
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: harbor.yuiop.org
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: homepage-dev 
+  HARBOR_PROJECT: homepage
+
+jobs:
+  build:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      - name: 1/8. Checkout repository
+        uses: actions/checkout@v5
+
+      - name: 2/8. Login to Harbor Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name : 3/8. Get latest version from Harbor and increment
+        id: version
+        run: |
+          # Harbor API를 통해 기존 태그 목록 가져오기
+          TAGS=$(curl -s -u "${{ secrets.HARBOR_USERNAME }}:${{ secrets.HARBOR_PASSWORD }} " \
+            "https://${{ env.REGISTRY }}/api/v2.0/projects/${{ env.HARBOR_PROJECT }}/repositories/${{ env.IMAGE_NAME }}/artifacts?page=1&page_size=100" \
+            | jq -r '.[].tags[]?.name' 2>/dev/null || echo "")
+          
+          # sematic version 형태의 태그만 필터링하고 최신 버전 찾기
+          LATEST_VERSION=$(echo "$TAGS" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+
+          if [ -z "$LATEST_VERSION" ]; then
+            # 기존 버전이 없으면 초기 버전 설정
+            NEW_VERSION="0.1.0"
+            echo "No existing version found. Starting with $NEW_VERSION"
+          else 
+            echo "Latest version found: $LATEST_VERSION"
+
+            # 버전 분리
+            MAJOR=$(echo $LATEST_VERSION | cut -d. -f1)
+            MINOR=$(echo $LATEST_VERSION | cut -d. -f2)
+            PATCH=$(echo $LATEST_VERSION | cut -d. -f3)
+
+            # Minor 버전 증가
+            MINOR=$((MINOR + 1))
+          fi
+
+          # 빌드 번호와 날짜 추가
+          BUILD_NUMBER=${GITHUB_RUN_NUMBER}
+          DATE=$(date +%Y%m%d)
+          SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-7)
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_build=$NEW_VERSION-build.$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "version_date=$NEW_VERSION-$DATE" >> $GITHUB_OUTPUT
+          echo "version_sha=$NEW_VERSION-$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MAJOR.$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$MAJOR.$MINOR.$PATCH" >> $GITHUB_OUTPUT
+
+      # Install the cosign tool except on PR
+      # https://github.com/sigstore/cosign-installer
+      - name: 4/8. Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v4.0.0
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: 5/8. Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 6/8. Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dockerbuild
+          file: ./dockerbuild/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_build }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_date }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.patch }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+          cache-from: type-gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            VCS_REF=${{ github.sha }}
+          
+      - name: 7/8. Sign the published Docker image
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          IMAGE_DIGEST: ${{ steps.build-and-push.outputs.digest }}
+        run: |
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}
+
+      - name: 8/8. Output version information
+        run: |
+            echo "🎉 Docker image built and pushed successfully!"
+            echo "📦 Version: ${{ steps.version.outputs.version }}"
+            echo "🏷️  Tags:"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_build }}"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}"
+            echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            echo "🔒 Image digest: ${{ steps.build-and-push.outputs.digest }}"
+
+
+
+        

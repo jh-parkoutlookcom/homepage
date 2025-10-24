@@ -1,5 +1,5 @@
 /backend/target
-
+/action-runner
 # Logs
 logs
 *.log
