@@ -9,7 +9,8 @@ on:
     branches: [ "main" ]
     paths:
       - 'dockerbuild/**'
-    # tags: [ 'v*.*.*' ]
+      - '.github/workflows/docker-publish.yml'
+    tags: [ 'v*.*.*' ]
  
 env:
   # Use docker.io for Docker Hub if empty
@@ -52,7 +53,7 @@ jobs:
 
           if [ -z "$LATEST_VERSION" ]; then
             # 기존 버전이 없으면 초기 버전 설정
-            NEW_VERSION="0.1.0"
+            NEW_VERSION="v0.1.0"
             echo "No existing version found. Starting with $NEW_VERSION"
           else 
             echo "Latest version found: $LATEST_VERSION"
@@ -64,6 +65,7 @@ jobs:
 
             # Minor 버전 증가
             MINOR=$((MINOR + 1))
+            NEW_VERSION="v${MAJOR}.${MINOR}.0"
           fi
 
           # 빌드 번호와 날짜 추가
@@ -101,9 +103,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_build }}
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_date }}
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_sha }}
-            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}
-            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}
-            ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.patch }}
             ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:latest
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
