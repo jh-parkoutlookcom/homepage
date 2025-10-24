@@ -44,12 +44,12 @@ jobs:
         id: version
         run: |
           # Harbor API를 통해 기존 태그 목록 가져오기
-          TAGS=$(curl -s -u "${{ secrets.HARBOR_USERNAME }}:${{ secrets.HARBOR_PASSWORD }} " \
+          TAGS=$(curl -s -u "${{ secrets.HARBOR_USERNAME }}:${{ secrets.HARBOR_PASSWORD }}" \
             "https://${{ env.REGISTRY }}/api/v2.0/projects/${{ env.HARBOR_PROJECT }}/repositories/${{ env.IMAGE_NAME }}/artifacts?page=1&page_size=100" \
             | jq -r '.[].tags[]?.name' 2>/dev/null || echo "")
           
           # sematic version 형태의 태그만 필터링하고 최신 버전 찾기
-          LATEST_VERSION=$(echo "$TAGS" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          LATEST_VERSION=$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
 
           if [ -z "$LATEST_VERSION" ]; then
             # 기존 버전이 없으면 초기 버전 설정
