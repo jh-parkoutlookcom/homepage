@@ -24,6 +24,20 @@ jobs:
       - name: 1. Checkout 
         uses: actions/checkout@v5
 
+      - name: 1.5. Truest Harbor certificate
+        run: |
+          # Get the certificate from Harbor
+          echo -n | openssl s_client -connect harbor.yuiop.org:443 -servername harbor.yuiop.org 2>/dev/null | \
+            sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | \
+            sudo tee /usr/local/share/ca-certificates/harbor.crt
+
+          # Update the CA certificates
+          sudo update-ca-certificates
+
+          # Also add to Docker daemon config
+          sudo mkdir -p /etc/docker/certs.d/harbor.yuiop.org
+          sudo cp /usr/local/share/ca-certificates/harbor.crt /etc/docker/cert.d/harbor.yuiop.org/ca.crt
+
       # 1. BuildKit (Buildx) 설정 - K8s 드라이버 사용 
       - name: 2. Set up Docker Buildx 
         uses: docker/setup-buildx-action@v3
