@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homepage-backend
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/your-org/k8s-manifests
+    targetRevision: main
+    path: overlays/production
+    
+    # Kustomize 사용
+    kustomize:
+      images:
+        - harbor.yuiop.org/homepage/homepage-backend:latest
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: homepage-production
+  
+  syncPolicy:
+    automated:
+      prune: true      # 삭제된 리소스 자동 제거
+      selfHeal: true   # Drift 자동 복구
+      allowEmpty: false
+    
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  revisionHistoryLimit: 10
+  
+  # Health check
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # HPA가 관리하므로 무시

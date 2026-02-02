@@ -1,0 +1,19 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: homepage-runner
+  namespace: actions-runner-system
+spec:
+  replicas: 2
+  template:
+    spec:
+      repository: harbor.yuiop.org/homepage
+      image: harbor.yuiop.org/homepage/runner-buildkit:latest
+      labels:
+        - self-hosted
+        - linux
+        - buildkit
+      # 도커 데몬 없이 BuildKit만 사용하므로 dind 불필요
+      dockerdWithinRunnerContainer: false
+      
+        

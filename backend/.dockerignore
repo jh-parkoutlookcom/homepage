@@ -1,0 +1,8 @@
+target/
+.git/
+.gitignore
+.github/
+*.md
+.vscode/
+.devcontainer/
+.env

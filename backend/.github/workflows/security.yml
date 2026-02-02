@@ -1,0 +1,24 @@
+# Security scanning (cargo audit)
+
+name: homepage Backend Actions Runner Scale Set
+on:
+  push:
+    branches: [ "main" ]
+    # paths:
+    tags: [ 'v*.*.*' ]
+
+env:
+    REGISTRY: harbor.yuiop.org
+    IMAGE_NAME: homepage-backend
+    HARBOR_PROJECT: homepage
+
+jobs:
+  build:
+    # You need to use the INSTALLATION_NAME from the previous step
+    runs-on: homepage-backend-arss
+    permissions:
+        contents: read
+        packages: write
+        id-token: write
+    steps:
+      - run: echo "🎉 This job uses runner scale set runners!"

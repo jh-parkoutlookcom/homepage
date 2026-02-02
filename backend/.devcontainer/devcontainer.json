@@ -1,27 +1,40 @@
 {
-    "name": "homepage-backend", 
-    "dockerComposeFile": ["docker-compose.yml"],
+    "name": "homepage backend",
+    "dockerComposeFile": [
+        "docker-compose.yml"
+    ],
     "service": "devcontainer",
-    "workspaceFolder": "/homepage-backend",
+    "workspaceFolder": "/workspace",
+    "shutdownAction": "stopCompose",
+    "containerEnv": {
+        "ENVIRONMENT": "development"
+    },
     "customizations": {
-        "vscode" : {
+        "vscode": {
             "extensions": [
-                "ms-azuretools.vscode-docker",
-                "esbenp.prettier-vscode",
-                "dbaeumer.vscode-eslint",
-                "ms-vscode.vscode-typescript-next"
+                "rust-lang.rust-analyzer",
+                "ms-vscode.vscode-json",
+                "ms-vscode-remote.remote-containers",
+                "mercari.grpc-federation",
+                "postman.postman-for-vscode",
+                "github.vscode-github-actions"
             ],
             "settings": {
-                "terminal.integrated.shell.linux": "/bin/bash",
+                "terminal.integrated.shell.linux": "/bin/zsh",
+                "editor.formatOnSave": true,
                 "rust-analyzer.check.command": "check",
                 "rust-analyzer.cargo.buildScripts.enable": true,
-                "editor.formatOnSave": true,
                 "[rust]": {
                     "editor.defaultFormatter": "rust-lang.rust-analyzer"
                 }
             }
-        }   
+        }
     },
     "remoteUser": "vscode",
-    "postCreateCommand": ""
+    "mounts": [
+        "source=vscode-extensions,target=/home/vscode/.vscode-server/extensions,type=volume",
+        "source=vscode-userdata,target=/home/vscode/.vscode-server/data/User,type=volume",
+        "source=vscode-globalstorage,target=/home/vscode/.vscode-server/data/User/globalStorage,type=volume"
+    ]
+    // "postCreateCommand": "chmod +x /workspace/.devcontainer/start-dev.sh && /workspace/.devcontainer/start-dev.sh"
 }

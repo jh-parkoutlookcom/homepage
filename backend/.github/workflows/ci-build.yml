@@ -1,0 +1,185 @@
+# CI(test, lint, format check)
+
+name: Homepage-Backend-CI-Build
+on:
+  push:
+    branches: [ "main", "develop" ]
+    paths-ignore:
+      - 'docs/**'        # docs 아래 전부 제외
+      - '**/*.md'        # 모든 Markdown 변경 제외
+      - '.vscode/**'     # 에디터 설정 제외
+      - 'tests/**'      # 테스트 코드 변경 제외
+
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: harbor.yuiop.org
+  IMAGE_NAME: homepage-backend
+  HARBOR_PROJECT: homepage
+  ARGOCD_REPO: https://github.com/jh-parkoutlookcom/homepage-backend/k8s-manifests
+
+jobs:
+  # =============================================
+  # Stage 1: Test & Lint
+  test:
+    name: Test-Lint
+    runs-on: homepage-backend-arss
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --all
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+  # ===============================================
+  # Stage 2: Build & Push Docker Image
+  # ===============================================
+  build:
+    name: Build & Push
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: homepage-backend-arss
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value={{date 'YYYYMMDD-HHmmss'}}-{{sha}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT_SHA=${{ github.sha }}
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ===============================================
+  # Stage 3: Trigger Jenkins Integration Tests
+  # ===============================================
+  trigger-jenkins:
+    name: Trigger Jenkins Tests
+    needs: build
+    runs-on: homepage-backend-arrs
+    steps:
+      - name: Trigger Jenkins job
+        run: |
+          IMAGE_TAG=$(echo "${{ needs.build.outputs.image-tag }}" | head -1)
+
+          curl -X POST \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+            "https://jenkins.yuiop.org/job/homepage-backend-intergration/buildWithParameters" \
+            -d "IMAGE_TAG=${IMAGE_TAG}" \
+            -d "IMAGE_DIGEST=${{ needs.build.outputs.image-digest }}" \
+            -d "GIT_COMMIT=${{ github.sha }}" \
+            -d "TRIGGERED_BY=${{ github.actor }}"
+
+      - name: Wait for Jenkins job to complete
+        run: |
+            # Jenkins job 완료 대기 (optional)
+            BUILD_NUMBER=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+              "https://jenkins.yuiop.org/job/homepage-backend-integration/lastBuild/buildNumber")
+            
+            echo "Waiting for Jenkins build #${BUILD_NUMBER}..."
+            
+            for i in {1..60}; do
+              STATUS=$(curl -s -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+                "https://jenkins.yuiop.org/job/homepage-backend-integration/${BUILD_NUMBER}/api/json" \
+                | jq -r '.result')
+              
+              if [ "$STATUS" = "SUCCESS" ]; then
+                echo "Jenkins build succeeded"
+                exit 0
+              elif [ "$STATUS" = "FAILURE" ] || [ "$STATUS" = "ABORTED" ]; then
+                echo "Jenkins build failed: $STATUS"
+                exit 1
+              fi
+              
+              echo "Jenkins build still running... ($i/60)"
+              sleep 10
+            done
+            
+            echo "Jenkins build timeout"
+            exit 1
+  # ===============================================
+  # Stage 4: Update ArgoCD Manifest
+  # ===============================================
+  update-manifest:
+    name: Update K8s Manifest
+    needs: [build, trigger-jenkins]
+    runs-on: homepage-backend-arss
+    steps:
+      - name: Checkout manifest repo
+        uses: actions/checkout@v5
+        with:
+          repository: jh-parkoutlookcom/homepage-backend-k8s-manifests
+          token: ${{ secrets.MANIFEST_REPO_TOKEN }}
+          path: manifests

@@ -1,23 +1,19 @@
-# development stage
-FROM rust:slim AS development 
+# Production Dockerfile
+FROM rust:slim AS builder 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    wget \
-    unzip \
     build-essential \
     pkg-config \
     libssl-dev \
     ca-certificates \
-    git \
-    zsh \
-    sudo \
     redis-tools \
     protobuf-compiler \
-    libprotobuf-dev \ 
+    libprotobuf-dev \
+    wget \
+    unzip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Rust 환경 설정
 RUN rustup default stable \
@@ -44,38 +40,22 @@ RUN echo '#!/bin/sh' > /etc/profile.d/oracle.sh \
     && echo 'export PATH=$ORACLE_HOME:$PATH' >> /etc/profile.d/oracle.sh \
     && chmod +x /etc/profile.d/oracle.sh
 
-RUN groupadd --gid 1000 vscode \
-    && useradd --uid 1000 --gid vscode --shell /bin/zsh --create-home vscode \
-    && echo vscode ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/vscode \
-    && chmod 0440 /etc/sudoers.d/vscode \
-    && mkdir -p /home/vscode/.vscode-server/bin \
-    && mkdir -p /home/vscode/.vscode-server/extensions \
-    && mkdir -p /home/vscode/.vscode-server/data/User \
-    && chown -R vscode:vscode /home/vscode
-USER vscode
-WORKDIR /workspace
-RUN sudo chown -R vscode:vscode /workspace
-
-# ohymyzsh 설치 및 플러그인 설정
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
-    && git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions \
-    && git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-COPY --chown=vscode:vscode zshrc /home/vscode/.zshrc
-RUN echo 'source /etc/profile.d/oracle.sh' >> /home/vscode/.zshrc
-
-# Build stage
-FROM development AS build
-RUN cargo build --release -p web-server
+WORKDIR /workspace 
+COPY . .
+RUN cargo build --release -p web-server  
 
 # Production stage
-FROM debian:slim AS production
+FROM debian:stable-slim AS production
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     ca-certificates \
     redis-tools \
+    wget \
+    unzip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
 # oracle client installation
 RUN mkdir -p /opt/oracle \
     && cd /opt/oracle \
@@ -95,7 +75,6 @@ RUN echo '#!/bin/sh' > /etc/profile.d/oracle.sh \
     && chmod +x /etc/profile.d/oracle.sh
 
 WORKDIR /app
-# COPY --from=build /workspace/target/release/web-server /app/web-server
-COPY /workspace/target/release/web-server /app/web-server
+COPY --from=builder /workspace/target/release/web-server /app/web-server
 EXPOSE 8080 50051
 CMD ["/app/web-server"]

@@ -1,0 +1,51 @@
+# Main deployment workflow
+
+name: Homepage-Backend-Deploy
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'docs/**'        # docs 아래 전부 제외
+      - '**/*.md'        # 모든 Markdown 변경 제외
+      - '.vscode/**'     # 에디터 설정 제외
+      - 'tests/**'      # 테스트 코드 변경 제외
+  workflow_dispatch:
+
+env:
+    REGISTRY: harbor.yuiop.org
+    IMAGE_NAME: homepage-backend
+    HARBOR_PROJECT: homepage
+
+jobs:
+  deploy:
+    needs: test # CI 성공 후에만
+    runs-on: homepage-backend-arss
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build and push
+        uses: ./.github/workflows/deploy-build.yml
+  build:
+    # You need to use the INSTALLATION_NAME from the previous step
+    runs-on: homepage-backend-arss
+    permissions:
+        contents: read
+        packages: write
+        id-token: write
+    steps:
+      - name: 1/8. Checkout repository
+        uses: actions/checkout@v5
+
+      - name: 2/8. Login to Harbor Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+      
+      - name: 3/8. Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:latest

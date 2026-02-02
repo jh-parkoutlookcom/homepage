@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: homepage-backend
+  namespace: homepage
+spec:
+  selector:
+    app: homepage-backend
+  ports:
+    - name: http
+      port: 8080
+    - name: grpc
+      port: 50051

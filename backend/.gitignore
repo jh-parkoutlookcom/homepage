@@ -1,0 +1,28 @@
+# Rust 
+target/
+Cargo.lock
+**/*.rs.bk 
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment 
+.env
+.env.local
+*.log 
+
+# Generated
+crates/grpc-api/src/generated
+
+# Kubernetes secrets
+k8s/secrets/*
+!k8s/secrets/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
