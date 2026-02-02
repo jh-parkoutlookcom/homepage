@@ -45,7 +45,7 @@ jobs:
           driver: kubernetes
           buildkitd-config-inline: |
             [registry."harbor.yuiop.org"]
-              ca = "/etc/docker/certs.d/harbor.yuiop.org/ca.crt"
+              ca = ["/etc/docker/certs.d/harbor.yuiop.org/ca.crt"]
       
       # 2. Harbor 레지스트리 로그인 
       - name: Log in to the Harbor registry 
