@@ -66,3 +66,22 @@ jobs:
           # 캐시 활용?
           cache-from: type=registry,ref=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      # 4. Update GitOps Repository 
+      - name: 4. Update GitOps Repository
+        env:
+          GITOPS_REPO: https://github.com/jh-parkoutlookcom/homepage-gitops.git
+          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          GITOPS_USER_EMAIL: jh-park@outlook.com
+          GITOPS_USER_NAME: CI Bot
+        run: |
+          set -e
+          git clone https://${GITOPS_TOKEN}@${GITOPS_REPO#https://} gitops-repo
+          cd gitops-repo
+          sed -i "s|image: harbor.yuiop.org/homepage/homepage:*|image: harbor.yuiop.org/homepage/homepage:${{ github.sha }}|g" ./apps/homepage/overlays/prod/deployment.yaml
+          git config user.email "${GITOPS_USER_EMAIL}"
+          git config user.name "${GITOPS_USER_NAME}"
+
+          
+          git commit -am "Update homepage image to ${{ github.sha }}"
+          git push origin main
