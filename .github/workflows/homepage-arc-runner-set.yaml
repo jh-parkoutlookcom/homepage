@@ -78,7 +78,7 @@ jobs:
           set -e
           git clone https://${GITOPS_TOKEN}@${GITOPS_REPO#https://} gitops-repo
           cd gitops-repo
-          sed -i "s|image: harbor.yuiop.org/homepage/homepage:*|image: harbor.yuiop.org/homepage/homepage:${{ github.sha }}|g" ./apps/homepage/overlays/prod/deployment.yaml
+          sed -i "s|image: harbor.yuiop.org/homepage/homepage:*|image: harbor.yuiop.org/homepage/homepage:${{ github.sha }}|g" ./apps/homepage/overlays/prod/image-tag.yaml
           git config user.email "${GITOPS_USER_EMAIL}"
           git config user.name "${GITOPS_USER_NAME}"
 
