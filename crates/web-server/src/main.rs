@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
     let rest_app = Router::new()
         .route("/health", get(|| async { "OK" }))
         .nest("/api/v1", api_routes)
-        .fallback_service(ServeDir::new("/frontend").append_index_html_on_directories(true))
+        .fallback_service(ServeDir::new("/app/frontend").append_index_html_on_directories(true))
         .layer(CompressionLayer::new());
 
     // gRPC service
