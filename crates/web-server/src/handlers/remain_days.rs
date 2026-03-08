@@ -10,12 +10,13 @@ const CVAD_LISTS: [[&str; 2]; 2] = [
     ["https://cvad.yuiop.org", "yuiop"],
 ];
 
-const SSL_LISTS: [&str; 5] = [
+const SSL_LISTS: [&str; 6] = [
     "https://nuc-citrix.yuiop.org",
     "https://nuc-gateway.yuiop.org",
     "https://cvad.yuiop.org",
     "https://gateway.yuiop.org:40443",
     "https://n8n.yuiop.org",
+    "https://gitlab-gitlab.yuiop.org",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
