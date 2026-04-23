@@ -6,214 +6,143 @@ stages:
 
 variables:
   CI_REGISTRY_IMAGE: registry-gitlab.yuiop.org/$CI_PROJECT_PATH
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/certs"
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
 
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
+    - .cargo/bin
     - .cargo/registry
     - .cargo/git
     - target/
 
-# ============================================================================
-# LINT STAGE
-# ============================================================================
 lint:yaml:
   stage: lint
-  image: alpine:latest
+  image: cytopia/yamllint:latest
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
-  before_script:
-    - apk add --no-cache yamllint
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
   script:
     - yamllint .gitlab-ci.yml
-    - yamllint k8s/**/*.yaml
-  allow_failure: true
+    - yamllint k8s/
 
 lint:dockerfile:
   stage: lint
-  image: hadolint/hadolint:latest
+  image:
+    name: hadolint/hadolint:latest
+    entrypoint: [""]
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH
       changes:
-        - dockerbuild/**
         - Dockerfile
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+        - dockerbuild/**
+        - .gitlab-ci.yml
+    - if: $CI_COMMIT_TAG
   script:
-    - hadolint ./Dockerfile
-    - hadolint ./dockerbuild/Dockerfile
-  allow_failure: true
+    - hadolint Dockerfile
+    - hadolint dockerbuild/Dockerfile
 
-# ============================================================================
-# TEST STAGE
-# ============================================================================
-test:cargo:
+lint:rust:
+  stage: lint
+  image: rust:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - rustup component add rustfmt clippy
+  script:
+    - cargo fmt --all --check
+    - cargo clippy --workspace --all-targets -- -D warnings
+
+test:rust:
   stage: test
   image: rust:latest
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
-  before_script:
-    - rustc --version
-    - cargo --version
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
   script:
     - cargo test --workspace --verbose
-  artifacts:
-    reports:
-      junit: target/test-results.xml
-    paths:
-      - target/debug/deps/*.profdata
-      - target/coverage/
-    expire_in: 30 days
-  allow_failure: true
 
-test:cargo-check:
-  stage: test
-  image: rust:latest
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
-  before_script:
-    - rustc --version
-    - cargo --version
-  script:
-    - cargo check --workspace --all-targets
-    - cargo clippy --workspace -- -D warnings
-  allow_failure: false
-
-# ============================================================================
-# BUILD STAGE
-# ============================================================================
-build:docker:
+build:image:
   stage: build
-  image: docker:latest
-  services:
-    - docker:dind
-  tags:
-    - docker
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
-        - dockerbuild/**
         - Dockerfile
+        - dockerbuild/**
         - .gitlab-ci.yml
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
+    - if: $CI_COMMIT_TAG
   before_script:
-    - apk add --no-cache curl jq
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - mkdir -p /kaniko/.docker
+    - |
+      printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}' \
+        "$CI_REGISTRY" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" \
+        > /kaniko/.docker/config.json
   script:
-    # Get version information
     - |
-      # Get latest tags from GitLab registry
-      TAGS=$(curl -s -H "DOCKER-DISTRIBUTION-API-VERSION: 2" \
-        "https://$CI_REGISTRY/v2/$CI_PROJECT_PATH/tags/list" 2>/dev/null | jq -r '.tags[]' 2>/dev/null || echo "")
-      
-      LATEST_VERSION=$(echo "$TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-      
-      if [ -z "$LATEST_VERSION" ]; then
-        NEW_VERSION="v0.1.0"
-        echo "No existing version found. Starting with $NEW_VERSION"
-      else 
-        echo "Latest version found: $LATEST_VERSION"
-        MAJOR=$(echo $LATEST_VERSION | cut -d. -f1)
-        MINOR=$(echo $LATEST_VERSION | cut -d. -f2)
-        MINOR=$((MINOR + 1))
-        NEW_VERSION="${MAJOR}.${MINOR}.0"
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        IMAGE_TAG="$CI_COMMIT_TAG"
+      else
+        IMAGE_TAG="$CI_COMMIT_SHORT_SHA"
       fi
-      
-      DATE=$(date +%Y%m%d)
-      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
-      
-      echo "VERSION=$NEW_VERSION" > build.env
-      echo "VERSION_DATE=$NEW_VERSION-$DATE" >> build.env
-      echo "VERSION_SHA=$NEW_VERSION-$SHORT_SHA" >> build.env
-      
+      echo "IMAGE_TAG=$IMAGE_TAG" > build.env
       cat build.env
-    
-    - source build.env
-    
-    # Build main application image
     - |
-      docker build \
-        --build-arg VERSION=$VERSION \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        --build-arg VCS_REF=$CI_COMMIT_SHA \
-        -t $CI_REGISTRY_IMAGE:$VERSION \
-        -t $CI_REGISTRY_IMAGE:$VERSION_DATE \
-        -t $CI_REGISTRY_IMAGE:$VERSION_SHA \
-        -t $CI_REGISTRY_IMAGE:latest \
-        -f Dockerfile \
-        .
-    
-    # Build dev image
+      . build.env
+      /kaniko/executor \
+        --context "$CI_PROJECT_DIR" \
+        --dockerfile "$CI_PROJECT_DIR/Dockerfile" \
+        --destination "$CI_REGISTRY_IMAGE:$IMAGE_TAG" \
+        --destination "$CI_REGISTRY_IMAGE:latest" \
+        --build-arg VERSION="$IMAGE_TAG" \
+        --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+        --build-arg VCS_REF="$CI_COMMIT_SHA"
     - |
-      docker build \
-        --build-arg VERSION=$VERSION \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        --build-arg VCS_REF=$CI_COMMIT_SHA \
-        -t $CI_REGISTRY_IMAGE/dev:$VERSION \
-        -t $CI_REGISTRY_IMAGE/dev:latest \
-        -f ./dockerbuild/Dockerfile \
-        ./dockerbuild
-    
-    # Push images
-    - docker push $CI_REGISTRY_IMAGE:$VERSION
-    - docker push $CI_REGISTRY_IMAGE:$VERSION_DATE
-    - docker push $CI_REGISTRY_IMAGE:$VERSION_SHA
-    - docker push $CI_REGISTRY_IMAGE:latest
-    - docker push $CI_REGISTRY_IMAGE/dev:$VERSION
-    - docker push $CI_REGISTRY_IMAGE/dev:latest
-  
+      . build.env
+      /kaniko/executor \
+        --context "$CI_PROJECT_DIR/dockerbuild" \
+        --dockerfile "$CI_PROJECT_DIR/dockerbuild/Dockerfile" \
+        --destination "$CI_REGISTRY_IMAGE/dev:$IMAGE_TAG" \
+        --destination "$CI_REGISTRY_IMAGE/dev:latest" \
+        --build-arg VERSION="$IMAGE_TAG" \
+        --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+        --build-arg VCS_REF="$CI_COMMIT_SHA"
   artifacts:
     reports:
       dotenv: build.env
     expire_in: 1 day
-  after_script:
-    - docker logout $CI_REGISTRY
 
-# ============================================================================
-# DEPLOY STAGE
-# ============================================================================
 deploy:gitops:
   stage: deploy
   image: alpine:latest
-  tags:
-    - docker
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - Dockerfile
         - dockerbuild/**
         - .gitlab-ci.yml
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
-  dependencies:
-    - build:docker
+    - if: $CI_COMMIT_TAG
+  needs:
+    - job: build:image
+      artifacts: true
   before_script:
     - apk add --no-cache git
   script:
-    - source build.env
-    
-    # Clone GitOps repository
+    - . build.env
     - |
       git clone https://${GITOPS_TOKEN}@${GITOPS_REPO#https://} gitops-repo
       cd gitops-repo
-      
-      # Update image tag
-      sed -i "s|image:.*$CI_PROJECT_PATH.*$|image: $CI_REGISTRY_IMAGE:$VERSION|g" ./apps/homepage/overlays/prod/image-tag.yaml
-      
-      # Configure git
-      git config user.email "${GITOPS_USER_EMAIL}"
-      git config user.name "${GITOPS_USER_NAME}"
-      
-      # Commit and push
+      sed -i "s|image: .*|image: $CI_REGISTRY_IMAGE:$IMAGE_TAG|" ./apps/homepage/overlays/prod/image-tag.yaml
+      git config user.email "$GITOPS_USER_EMAIL"
+      git config user.name "$GITOPS_USER_NAME"
       git add -A
       if git diff --cached --quiet; then
         echo "No changes to commit"
       else
-        git commit -m "Update homepage image to $VERSION (commit: $CI_COMMIT_SHORT_SHA)"
+        git commit -m "Update homepage image to $IMAGE_TAG (commit: $CI_COMMIT_SHORT_SHA)"
         git push origin main
       fi
   environment:
