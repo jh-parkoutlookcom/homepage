@@ -95,10 +95,6 @@ build:image:
     entrypoint: [""]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - Dockerfile
-        - dockerbuild/**
-        - .gitlab-ci.yml
     - if: $CI_COMMIT_TAG
   before_script:
     - mkdir -p /kaniko/.docker
@@ -145,10 +141,6 @@ deploy:gitops:
   image: alpine:latest
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - Dockerfile
-        - dockerbuild/**
-        - .gitlab-ci.yml
     - if: $CI_COMMIT_TAG
   needs:
     - job: build:image
@@ -177,4 +169,3 @@ deploy:gitops:
     name: production
     action: start
     deployment_tier: production
-  when: manual
