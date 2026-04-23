@@ -111,12 +111,22 @@ async fn check_all_services() -> Vec<ServiceStatus> {
     for row in CVAD_LISTS.iter() {
         let cvad_url = row[0];
         let site_name = row[1];
-        let api = cvad_restapi::CvadRestApi::new(cvad_url, site_name).await;
-        let expire_date = api.get_expire_date().await;
         let name = cvad_url.replace("https://", "").replace("/cvad/manage", "");
+        
+        // API 호출 타임아웃 처리 - 10초 내에 응답 없으면 None 반환
+        let expire_date = match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            async {
+                let api = cvad_restapi::CvadRestApi::new(cvad_url, site_name).await;
+                api.get_expire_date().await
+            }
+        ).await {
+            Ok(result) => result,
+            Err(_) => None, // 타임아웃 시 None으로 처리 → "확인 불가" 상태로 표시
+        };
 
         let (remaining, status_code, status) = if let Some(ref expire) = expire_date {
-            if let Ok(expire_dt) = DateTime::parse_from_rfc3339(expire) {
+            if let Ok(_expire_dt) = DateTime::parse_from_rfc3339(expire) {
                 let (remain, code, stat) = calculate_remaining(expire);
                 (remain, code, stat)
             } else {
