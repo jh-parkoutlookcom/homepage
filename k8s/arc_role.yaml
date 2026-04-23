@@ -1,15 +1,16 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: arc-runner-role
   namespace: arc-runners
 rules:
-- apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: [""]
-  resources: ["pods", "pods/log", "pods/exec", "configmaps"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -18,9 +19,9 @@ metadata:
   name: arc-runner-binding
   namespace: arc-runners
 subjects:
-- kind: ServiceAccount
-  name: homepage-arc-runner-set-gha-rs-no-permission
-  namespace: arc-runners
+  - kind: ServiceAccount
+    name: homepage-arc-runner-set-gha-rs-no-permission
+    namespace: arc-runners
 roleRef:
   kind: Role
   name: arc-runner-role
