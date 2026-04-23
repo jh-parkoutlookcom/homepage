@@ -1,3 +1,4 @@
+---
 stages:
   - lint
   - test
@@ -66,7 +67,9 @@ lint:rust:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends protobuf-compiler
+    - |
+      apt-get update && \
+      apt-get install -y --no-install-recommends protobuf-compiler
     - rustup component add rustfmt clippy
   script:
     - cargo fmt --all
@@ -79,7 +82,9 @@ test:rust:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends protobuf-compiler
+    - |
+      apt-get update && \
+      apt-get install -y --no-install-recommends protobuf-compiler
   script:
     - cargo test --workspace --verbose
 
@@ -155,14 +160,17 @@ deploy:gitops:
     - |
       git clone https://${GITOPS_TOKEN}@${GITOPS_REPO#https://} gitops-repo
       cd gitops-repo
-      sed -i "s|image: .*|image: $CI_REGISTRY_IMAGE:$IMAGE_TAG|" ./apps/homepage/overlays/prod/image-tag.yaml
+      sed -i \
+        "s|image: .*|image: $CI_REGISTRY_IMAGE:$IMAGE_TAG|" \
+        ./apps/homepage/overlays/prod/image-tag.yaml
       git config user.email "$GITOPS_USER_EMAIL"
       git config user.name "$GITOPS_USER_NAME"
       git add -A
       if git diff --cached --quiet; then
         echo "No changes to commit"
       else
-        git commit -m "Update homepage image to $IMAGE_TAG (commit: $CI_COMMIT_SHORT_SHA)"
+        git commit -m \
+          "Update homepage image to $IMAGE_TAG (commit: $CI_COMMIT_SHORT_SHA)"
         git push origin main
       fi
   environment:
